@@ -7,25 +7,36 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool, ToolException
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel
+from pydantic import Field, create_model
+
 
 ## ---------------------------------------- PACE6 API CONFIGURATIONS ---------------------------------------- ##
-class ApiSpec(BaseModel):
+class Parameter(NamedTuple):
+    name: str
+    """The name of the parameter"""
+
+    description: str
+    """The description of the parameter"""
+
+class ApiSpec(NamedTuple):
     name: str
     """The name of the API which will be recognized by LLM"""
 
     description: str
-    """A brief description of the API, including its arguments' descriptions in the Google Style docstring (https://google.github.io/styleguide/pyguide.html#383-functions-and-methods)."""
-
-    direct: bool = False
-    """True if the response is a direct message, False if it is an AI message"""
+    """A comprehensive description of the API."""
 
     endpoint: str
     """The endpoint of the API. It will retrieve POST call with a JSON body that represents the arguments of the API."""
 
+    parameters: tuple[Parameter] = ()
+    """The list of parameters of the API. Leave it an empty sequence if the API does not have any parameters."""
+
+    direct: bool = False
+    """True if the response is a direct message, False if it is an AI message"""
+
 def create_async_func(api_spec: ApiSpec):
-    async def async_func(*aaa, **kwargs):
-        print(f"Calling {api_spec.name} with args: {aaa} and {kwargs}")
+    async def async_func(**kwargs):
+        print(f"Calling {api_spec.name} with args: {kwargs}")
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(api_spec.endpoint, json=kwargs) as response:
@@ -35,16 +46,21 @@ def create_async_func(api_spec: ApiSpec):
         except:
             raise ToolException(f"Service is not available. The service may be available in a few moments.")
 
-    return StructuredTool.from_function(name=api_spec.name, coroutine=async_func, description=api_spec.description, return_direct=api_spec.direct)
+    fields = { name: (str, Field(description=desc)) for name, desc in api_spec.parameters }
+
+    return StructuredTool.from_function(coroutine=async_func,
+                                        name=api_spec.name,
+                                        args_schema=create_model(api_spec.name, **fields),
+                                        description=api_spec.description,
+                                        infer_schema=False,
+                                        parse_docstring=True,
+                                        return_direct=api_spec.direct)
 
 # TODO: load the API specs from a database
 api_specs = [
     ApiSpec(name="get_gps_position",
-            description="""Get the GPS position of a given country, in JSON format.
-            
-            Args:
-                country: The country code in question. It can be either ISO 3166-1 alpha-2 or alpha-3 code.
-            """,
+            description="Get the GPS position of a given country, in JSON format.",
+            parameters=(Parameter("country", "The country code in question. It can be either ISO 3166-1 alpha-2 or alpha-3 code."),),
             endpoint="http://localhost:8000/ai/gps")
 ]
 

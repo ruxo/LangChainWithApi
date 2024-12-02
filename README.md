@@ -1,15 +1,16 @@
 ﻿# Dependencies
 
-* `langchain-openai`
 * `aiohttp[speedups]`
-* `fastapi[standard]`
+* `langchain-openai`
+* `langgraph`
+* `python-dotenv`
 
 # How to run
 
 ## Run server
 
 ```bash
-fastapi dev server.py
+python server.py
 ```
 
 ## Run client
